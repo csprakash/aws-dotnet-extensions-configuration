@@ -30,6 +30,7 @@ namespace Amazon.Extensions.Configuration.SystemsManager
         public SystemsManagerConfigurationSource()
         {
             Filters = new List<ParameterStringFilter>();
+            ParameterNames = new List<string>();
         }
 
         /// <summary>
@@ -72,6 +73,20 @@ namespace Amazon.Extensions.Configuration.SystemsManager
         /// You can't filter using the parameter name.
         /// </summary>
         public List<ParameterStringFilter> Filters { get; }
+
+        /// <summary> 
+        /// Paramter names (including full path) to fetch values for.
+        /// This is mutually exclusive with @Path. If a single ParameterName is specified, only values for specified names are fetched and "Path" is ignored
+        /// </summary>
+        public List<string> ParameterNames { get; }
+
+        /// <summary> 
+        /// paramter name (including full path) to fetch a value for.
+        /// This is mutually exclusive with @Path. If a single ParameterName is specified, only values for specified names are fetched and "Path" is ignored
+        /// </summary>
+        public void AddParameterName(string parameterName) {
+            ParameterNames.Add(parameterName);
+        }
 
         /// <inheritdoc />
         public IConfigurationProvider Build(IConfigurationBuilder builder)

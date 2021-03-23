@@ -46,7 +46,9 @@ namespace Amazon.Extensions.Configuration.SystemsManager.Internal
         {
             return IsSecretsManagerPath(Source.Path)
                 ? await GetParameterAsync().ConfigureAwait(false)
-                : await GetParametersByPathAsync().ConfigureAwait(false);
+                : ( (Source.ParameterNames.Count > 0) ?
+                    await GetParametersAsync().ConfigureAwait(false):
+                    await GetParametersByPathAsync().ConfigureAwait(false));
         }
 
         private async Task<IDictionary<string, string>> GetParametersByPathAsync()
@@ -90,6 +92,30 @@ namespace Amazon.Extensions.Configuration.SystemsManager.Internal
             }
         }
 
+        /// Get parameters by key list
+        private async Task<IDictionary<string, string>> GetParametersAsync()
+        {
+            using (var client = Source.AwsOptions.CreateServiceClient<IAmazonSimpleSystemsManagement>())
+            {
+                if (client is AmazonSimpleSystemsManagementClient impl)
+                {
+                    impl.BeforeRequestEvent += ServiceClientBeforeRequestEvent;
+                }
+
+                var parameters = new List<Parameter>();
+                int startIndx = 0;
+                int totalNames = Source.ParameterNames.Count;
+                do
+                {
+                    List<string> maxTenNamesList = Source.ParameterNames.GetRange(startIndx, Math.Min(totalNames-startIndx, 10));
+                    var response = await client.GetParametersAsync(new GetParametersRequest { Names = maxTenNamesList, WithDecryption = true }).ConfigureAwait(false);
+                    parameters.AddRange(response.Parameters);
+                    startIndx += maxTenNamesList.Count;
+                } while (startIndx < totalNames);
+
+                return ProcessParameters(parameters);
+            }
+        }
         public static bool IsSecretsManagerPath(string path) => path.StartsWith(SecretsManagerPath, StringComparison.OrdinalIgnoreCase);
 
         public static IDictionary<string, string> AddPrefix(IDictionary<string, string> input, string prefix)
@@ -97,6 +123,11 @@ namespace Amazon.Extensions.Configuration.SystemsManager.Internal
             return string.IsNullOrEmpty(prefix)
                 ? input
                 : input.ToDictionary(pair => $"{prefix}{ConfigurationPath.KeyDelimiter}{pair.Key}", pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static IDictionary<string, string> ProcessParameters(IEnumerable<Parameter> input)
+        {
+            return input.ToDictionary(pair => pair.Name.Substring(pair.Name.LastIndexOf('/')+1), pair => pair.Value);
         }
 
         public static IDictionary<string, string> ProcessParameters(IEnumerable<Parameter> parameters, string path, IParameterProcessor parameterProcessor)
